@@ -7,7 +7,7 @@ $contacts_db_config = [
     'database' => 'contacts'
 ];
 
-// Create a separate connection for the contacts database
+// Create database connection
 $contacts_conn = new mysqli(
     $contacts_db_config['servername'],
     $contacts_db_config['username'],
@@ -28,14 +28,12 @@ $ami_config = [
     'password' => 'Bremen2025'
 ];
 
-// Fetch numbers to dial from contacts table using the contacts database connection
+// Fetch numbers to dial
 $numbers_to_dial = [];
 $sql = "SELECT id, phone_number, duration FROM contacts ORDER BY id";
 try {
     $result = $contacts_conn->query($sql);
-    if (!$result) {
-        throw new Exception($contacts_conn->error);
-    }
+    if (!$result) throw new Exception($contacts_conn->error);
     while ($row = $result->fetch_assoc()) {
         $numbers_to_dial[] = [
             'id' => $row['id'],
@@ -52,36 +50,35 @@ try {
 
 echo "Contacts fetched successfully.\n";
 
-// Establish a connection to the AMI
+// Establish AMI connection
 $socket = fsockopen($ami_config['host'], $ami_config['port'], $errno, $errstr, 30);
 if (!$socket) {
     echo "Connection failed: $errstr ($errno)\n";
     exit(1);
 }
 
-echo "AMI connection established successfully.\n";
-
-// Log in to the AMI
+// AMI Login
 fputs($socket, "Action: Login\r\n");
 fputs($socket, "Username: {$ami_config['username']}\r\n");
 fputs($socket, "Secret: {$ami_config['password']}\r\n\r\n");
 
 echo "AMI login successful.\n";
 
-// Function to originate a call with selectable audio playback
+// Modified originate call function
 function originate_call($socket, $number, $duration, $audio_file) {
     printf("Dialing %s with duration %d seconds using audio file '%s'...\n", $number, $duration, $audio_file);
     
-    // Originate the call
+    // Originate call with audio playback macro
     fputs($socket, "Action: Originate\r\n");
     fputs($socket, "Channel: Local/{$number}@outbound-calls\r\n");
-    fputs($socket, "Application: Playback\r\n");
-    fputs($socket, "Data: {$audio_file}\r\n");
+    fputs($socket, "Variable: AUDIO_FILE={$audio_file}\r\n");
+    fputs($socket, "Application: Dial\r\n");
+    fputs($socket, "Data: PJSIP/{$number}@easybell,,gU(play_audio)\r\n");
     fputs($socket, "CallerID: YourCallerID\r\n");
     fputs($socket, "Async: yes\r\n");
     fputs($socket, "Timeout: {$duration}000\r\n\r\n");
-    
-    // Get the initial response
+
+    // Response handling
     $response = '';
     $call_placed = false;
     
@@ -91,20 +88,18 @@ function originate_call($socket, $number, $duration, $audio_file) {
             $call_placed = true;
             echo "Call placed in queue\n";
         }
-        if ($line == "\r\n") {
-            break;
-        }
+        if ($line == "\r\n") break;
     }
     
     if (!$call_placed) {
         echo "Failed to place call: $response\n";
         return ['status' => 'FAILED', 'response' => $response];
     }
-    
-    // Wait for the call to finish or timeout
+
+    // Call monitoring
     $start_time = time();
     $call_status = 'UNKNOWN';
-    echo "Waiting for call to complete (max $duration seconds)...\n";
+    echo "Monitoring call status (max $duration seconds)...\n";
     
     while ((time() - $start_time) < $duration) {
         fputs($socket, "Action: CoreShowChannels\r\n\r\n");
@@ -116,131 +111,87 @@ function originate_call($socket, $number, $duration, $audio_file) {
             if (strpos($line, $number) !== false) {
                 $channels_found = true;
                 if (strpos($status_response, 'BridgeID:') !== false) {
-                    $call_status = 'ANSWER';
+                    $call_status = 'ANSWERED';
                     echo "Call answered!\n";
-                    break 2; // Exit both loops
+                    break 2;
                 }
             }
-            if ($line == "\r\n" && strpos($status_response, 'CoreShowChannelsComplete') !== false) {
-                break;
-            }
+            if ($line == "\r\n" && strpos($status_response, 'CoreShowChannelsComplete') !== false) break;
         }
         
         if (!$channels_found) {
-            if ($call_status == 'ANSWER') {
-                echo "Call completed normally\n";
-                break;
-            } else {
-                fputs($socket, "Action: Status\r\n\r\n");
-                $final_status = '';
-                while ($line = fgets($socket)) {
-                    $final_status .= $line;
-                    if ($line == "\r\n" && strpos($final_status, 'StatusComplete') !== false) {
-                        break;
-                    }
-                }
-                if (strpos($final_status, 'Status: BUSY') !== false) {
-                    $call_status = 'BUSY';
-                    echo "Line busy\n";
-                    break;
-                } else {
-                    $call_status = 'NOANSWER';
-                    echo "No answer\n";
-                    break;
-                }
-            }
+            $call_status = 'NOANSWER';
+            echo "No answer\n";
+            break;
         }
-        
         sleep(1);
     }
-    
+
     if ($call_status == 'UNKNOWN') {
         echo "Call timed out after $duration seconds\n";
         $call_status = 'TIMEOUT';
     }
+
+    // Additional logging and error handling
+    error_log("Call result: " . json_encode(['status' => $call_status, 'response' => $response]));
     
     return ['status' => $call_status, 'response' => $response];
 }
 
-// Select the audio file to be played (change this path as needed)
+// Audio file configuration
 $selected_audio = 'Sound.mp3';
 
-// Initialize an array for called numbers and a flag for the first call
+// Call processing
 $called_numbers = [];
-$first_number_called = false;
-
-// Iterate through each contact and attempt to call
 foreach ($numbers_to_dial as $contact) {
     $number = $contact['number'];
     $duration = $contact['duration'];
     $id = $contact['id'];
 
-    if (!$first_number_called) {
-        $first_number_called = true;
-    } else {
-        if (in_array($number, $called_numbers)) {
-            echo "Skipping $number as it has already been called.\n";
-            continue;
-        }
+    if (in_array($number, $called_numbers)) {
+        echo "Skipping $number (already called)\n";
+        continue;
     }
     $called_numbers[] = $number;
 
-    echo "Attempting to call contact ID {$id}: {$number} (Duration: {$duration} seconds)\n";
+    echo "Calling contact ID {$id}: {$number} (Duration: {$duration}s)\n";
     $call_result = originate_call($socket, $number, $duration, $selected_audio);
     
-    // Log the call attempt
-    $log_sql = "INSERT INTO call_log (contact_id, phone_number, call_time, status, response) VALUES (?, ?, NOW(), ?, ?)";
+    // Log call attempt
+    $log_sql = "INSERT INTO call_log (contact_id, phone_number, call_time, status, response) 
+                VALUES (?, ?, NOW(), ?, ?)";
     try {
         $stmt = $contacts_conn->prepare($log_sql);
-        if (!$stmt) {
-            throw new Exception($contacts_conn->error);
-        }
         $status = $call_result['status'];
-        $response = $call_result['response'];
+        $response = substr($call_result['response'], 0, 255); // Truncate if needed
         $stmt->bind_param("isss", $id, $number, $status, $response);
-        if (!$stmt->execute()) {
-            throw new Exception($stmt->error);
-        }
+        $stmt->execute();
         $stmt->close();
     } catch (Exception $e) {
-        error_log("Error logging call attempt: " . $e->getMessage());
-        echo "Error logging call attempt: " . $e->getMessage() . "\n";
-        exit(1);
+        error_log("Error logging call: " . $e->getMessage());
+        echo "Logging error: " . $e->getMessage() . "\n";
     }
 
-    // If the call was answered, update the contact's last successful call
-    if ($call_result['status'] == 'ANSWER') {
-        echo "Call to $number was answered.\n";
+    // Update last successful call
+    if ($call_result['status'] == 'ANSWERED') {
         $update_sql = "UPDATE contacts SET last_successful_call = NOW() WHERE id = ?";
         try {
             $stmt = $contacts_conn->prepare($update_sql);
-            if (!$stmt) {
-                throw new Exception($contacts_conn->error);
-            }
             $stmt->bind_param("i", $id);
-            if (!$stmt->execute()) {
-                throw new Exception($stmt->error);
-            }
+            $stmt->execute();
             $stmt->close();
         } catch (Exception $e) {
-            error_log("Error updating contact's last successful call: " . $e->getMessage());
-            echo "Error updating contact's last successful call: " . $e->getMessage() . "\n";
-            exit(1);
+            error_log("Update error: " . $e->getMessage());
         }
     }
     
-    // Wait for 5 seconds before making the next call
-    sleep(5);
+    sleep(5); // Interval between calls
 }
 
-echo "All calls completed.\n";
-
-// Log off from the AMI
+// Cleanup
 fputs($socket, "Action: Logoff\r\n\r\n");
-
-// Close the AMI connection
 fclose($socket);
-
-// Close the database connection
 $contacts_conn->close();
+
+echo "Call campaign completed.\n";
 ?>
