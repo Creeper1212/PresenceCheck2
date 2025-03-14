@@ -1,0 +1,75 @@
+/* Define CSS variables for maintainability */
+:root {
+    --navbar-bg: #ffee00;              /* Yellow background */
+    --text-color: #333;                /* Default text color */
+    --text-hover: #ff0000;             /* Red on hover for brand */
+    --link-bg-hover: rgba(0, 0, 0, 0.1); /* Background on hover/active for links */
+    --link-color-active: #ff0000;      /* Red on hover/active for links */
+    --separator-color: rgba(0, 0, 0, 0.1); /* Separator in collapsed menu */
+}
+
+/* General Navbar Styles */
+.navbar {
+    background-color: var(--navbar-bg);
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+}
+
+/* Brand Styles */
+.navbar-brand {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    transition: color 0.3s ease; /* Smooth color transition */
+}
+
+.navbar-brand:hover,
+.navbar-brand:focus {
+    color: var(--text-hover); /* Turns red on hover and focus */
+}
+
+.navbar-brand:focus {
+    outline: 2px solid var(--text-color);
+    outline-offset: 2px; /* Accessibility enhancement */
+}
+
+/* Nav Link Styles */
+.navbar-nav .nav-link {
+    color: var(--text-color);
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    border-radius: 0.25rem;
+    text-decoration: none;
+}
+
+.navbar-nav .nav-link:hover,
+.navbar-nav .nav-link:focus,
+.navbar-nav .nav-link.active {
+    background-color: var(--link-bg-hover);
+    color: var(--link-color-active); /* Turns red on hover, focus, and active */
+}
+
+/* Focus Styles for Accessibility */
+.navbar-nav .nav-link:focus {
+    outline: 2px solid var(--text-color);
+    outline-offset: 2px; /* Slight offset for better visibility */
+}
+
+/* Responsive Adjustments */
+@media (max-width: 991.98px) {
+    .navbar-nav {
+        padding-top: 0.5rem; /* Space when collapsed */
+    }
+    .navbar-nav .nav-item {
+        border-bottom: 1px solid var(--separator-color); /* Separator lines */
+    }
+    .navbar-nav .nav-item:last-child {
+        border-bottom: none; /* No border on last item */
+    }
+}
