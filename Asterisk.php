@@ -1,11 +1,6 @@
 <?php
 // Configuration for the contacts database
-$contacts_db_config = [
-    'servername' => 'localhost',
-    'username' => 'root',
-    'password' => '',
-    'database' => 'contacts'
-];
+include 'Dashboard/config.php';
 
 // Create database connection
 $contacts_conn = new mysqli(

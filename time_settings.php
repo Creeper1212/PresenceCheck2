@@ -110,7 +110,7 @@ $message = ""; // Initialize $message to an empty string
         </section>
     </main>
     <?php include 'AI.php'; ?>       <!--  Ensure these files are correctly included and necessary -->
-    <?php include 'translate.php'; ?>  <!--  and that their paths are correct. -->
+    <?php include 'Utilities/translate.php'; ?>  <!--  and that their paths are correct. -->
     <?php include 'Dashboard/footer.php'; ?> <!-- Consistent with header.php -->
 
 <?php

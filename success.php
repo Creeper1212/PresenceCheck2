@@ -29,7 +29,7 @@ $userName = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_nam
             <p>Thank you, <?php echo $userName; ?>! You will be redirected shortly.</p>
             <button class="btn btn-primary" onclick="window.location.href = 'index.php';">Go Back Now</button>
         </div>
-        <?php include 'translate.php'; ?>
+        <?php include 'Utilities/translate.php'; ?>
         <?php include 'Dashboard/footer.php'; ?>
     </div>
 </body>
